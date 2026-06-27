@@ -2,5 +2,6 @@
 //! and the future Tauri backend can reuse it unchanged (KTD1).
 
 pub mod config;
+pub mod git;
 pub mod message;
 pub mod store;
