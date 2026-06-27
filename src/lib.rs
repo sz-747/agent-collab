@@ -5,3 +5,4 @@ pub mod config;
 pub mod git;
 pub mod message;
 pub mod store;
+pub mod sync;
