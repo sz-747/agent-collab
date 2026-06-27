@@ -126,6 +126,25 @@ impl Git {
             .map(|_| ())
     }
 
+    /// Rebase preferring our (replayed) side on conflict — last-write-wins for
+    /// scribe docs (KTD9). During a rebase the replayed commits are "theirs",
+    /// so `-X theirs` keeps the just-written local content.
+    pub async fn pull_rebase_prefer_local(&self) -> Result<(), GitError> {
+        let branch = self.current_branch().await?;
+        self.run_checked(&[
+            "-c",
+            "core.editor=true",
+            "pull",
+            "--rebase",
+            "-X",
+            "theirs",
+            "origin",
+            &branch,
+        ])
+        .await
+        .map(|_| ())
+    }
+
     /// Check out `branch`, creating it from the current HEAD if it exists
     /// nowhere (local or remote-tracking). Leaves other branches untouched (R4).
     pub async fn ensure_branch(&self, branch: &str) -> Result<(), GitError> {
@@ -158,6 +177,24 @@ impl Git {
     /// retrying, bounded by `max_attempts`. `Failed` returns immediately —
     /// never a rebase loop (KTD8).
     pub async fn push_with_retry(&self, max_attempts: u32) -> Result<PushOutcome, GitError> {
+        self.push_retry(max_attempts, false).await
+    }
+
+    /// Like `push_with_retry`, but resolves collisions in favor of the local
+    /// (just-written) content — for scribe docs where both peers may edit the
+    /// same file (KTD9).
+    pub async fn push_with_retry_local_wins(
+        &self,
+        max_attempts: u32,
+    ) -> Result<PushOutcome, GitError> {
+        self.push_retry(max_attempts, true).await
+    }
+
+    async fn push_retry(
+        &self,
+        max_attempts: u32,
+        prefer_local: bool,
+    ) -> Result<PushOutcome, GitError> {
         let mut attempt: u32 = 0;
         loop {
             match self.push().await? {
@@ -168,7 +205,11 @@ impl Git {
                     if attempt >= max_attempts {
                         return Ok(PushOutcome::Rejected);
                     }
-                    self.pull_rebase().await?;
+                    if prefer_local {
+                        self.pull_rebase_prefer_local().await?;
+                    } else {
+                        self.pull_rebase().await?;
+                    }
                 }
             }
         }

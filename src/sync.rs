@@ -112,6 +112,26 @@ impl SyncEngine {
         }
     }
 
+    /// Write (overwrite) a scribe doc, index it for search, and commit+push it
+    /// to the collab branch with last-write-wins conflict resolution (R14/KTD9).
+    /// `rel_path` is repo-relative (e.g. `docs/notes.md`).
+    pub async fn write_doc(&self, rel_path: &str, content: &str) -> Result<(), SyncError> {
+        let full = self.repo.join(rel_path);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&full, content)?;
+        self.store.index_doc(rel_path, content)?;
+
+        self.git.add(&[rel_path]).await?;
+        self.git.commit(&format!("vice: update {rel_path}")).await?;
+        match self.git.push_with_retry_local_wins(5).await? {
+            PushOutcome::Pushed => Ok(()),
+            PushOutcome::Rejected => Err(SyncError::PushRejected),
+            PushOutcome::Failed(e) => Err(SyncError::PushFailed(e)),
+        }
+    }
+
     /// Pull, then reconcile. Pull is best-effort: a brand-new room has no remote
     /// branch yet, and an offline peer should still see local state.
     pub async fn poll(&self) -> Result<Vec<Message>, SyncError> {

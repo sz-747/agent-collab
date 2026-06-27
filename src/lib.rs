@@ -7,3 +7,4 @@ pub mod git;
 pub mod message;
 pub mod store;
 pub mod sync;
+pub mod vice;
