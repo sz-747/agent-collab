@@ -58,8 +58,10 @@ impl Git {
     /// Clone `url` into `dest` and return a handle to it.
     pub async fn clone(url: &str, dest: &Path) -> Result<Git, GitError> {
         let dest_s = dest.to_string_lossy().to_string();
+        // `--` stops option parsing so a `url` like `--upload-pack=...` can't
+        // smuggle a flag (argv injection hardening).
         let out = base_command()
-            .args(["clone", url, &dest_s])
+            .args(["clone", "--", url, &dest_s])
             .output()
             .await
             .map_err(|e| GitError::Spawn(e.to_string()))?;
@@ -127,6 +129,15 @@ impl Git {
     /// Check out `branch`, creating it from the current HEAD if it exists
     /// nowhere (local or remote-tracking). Leaves other branches untouched (R4).
     pub async fn ensure_branch(&self, branch: &str) -> Result<(), GitError> {
+        // A leading-dash ref would be parsed as an option by `checkout` (argv
+        // injection); reject it. Real branches here are always `collab/<topic>`.
+        if branch.starts_with('-') {
+            return Err(GitError::Failed {
+                cmd: "ensure_branch".into(),
+                code: None,
+                stderr: format!("refusing branch name starting with '-': {branch}"),
+            });
+        }
         if self.run(&["checkout", branch]).await?.status.success() {
             return Ok(());
         }
