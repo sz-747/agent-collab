@@ -1,0 +1,16 @@
+# Copy to .vice.toml (gitignored) and edit. Or place at the global path:
+#   <config-dir>/vice/config.toml   (e.g. ~/.config/vice/config.toml)
+# Per-repo .vice.toml wins over global.
+
+# Provider hint for genai (e.g. "openai", "anthropic", "deepseek", "ollama").
+provider = "anthropic"
+
+# Model id genai routes on. The AI message is tagged with this id (R10).
+model = "claude-opus-4-8"
+
+# Optional custom OpenAI-compatible base URL (DeepSeek/Qwen/local). Omit for default.
+# base_url = "https://api.deepseek.com/v1"
+
+# Name of the environment variable holding YOUR api key (R9).
+# The key is read from this env var at call time and never stored by the tool.
+api_key_env = "ANTHROPIC_API_KEY"
