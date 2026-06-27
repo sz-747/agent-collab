@@ -146,7 +146,7 @@ impl Store {
             Ok(Message {
                 id: r.get(0)?,
                 author: r.get(1)?,
-                kind: Kind::from_str(&kind_s).unwrap_or(Kind::Human),
+                kind: Kind::from_db(&kind_s).unwrap_or(Kind::Human),
                 model: r.get(3)?,
                 ts: r.get(4)?,
                 body: r.get(5)?,

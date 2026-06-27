@@ -12,6 +12,7 @@
 
 use crate::message::{Kind, Message};
 use crate::sync::SyncEngine;
+use crate::vice::{dispatch, parse_command, ModelClient};
 use std::time::Duration;
 
 /// What a typed line means.
@@ -57,18 +58,30 @@ fn hhmm_utc(ts: i64) -> (i64, i64) {
 }
 
 /// Run the chat loop: a blocking readline thread feeding an async select over
-/// typed lines and a 1s poll tick. `on_vice` handles `@vice` lines (wired to the
-/// real engine in U6); it returns the AI reply text to echo, or None.
-pub async fn run<F, Fut>(engine: SyncEngine, on_vice: F) -> Result<(), Box<dyn std::error::Error>>
-where
-    F: Fn(String) -> Fut,
-    Fut: std::future::Future<Output = ()>,
-{
+/// typed lines and a 1s poll tick. `model` (when present) services `@vice`
+/// lines; when absent, `@vice` reports it is disabled.
+pub async fn run<M: ModelClient>(
+    engine: SyncEngine,
+    model: Option<M>,
+) -> Result<(), Box<dyn std::error::Error>> {
     use rustyline::{DefaultEditor, ExternalPrinter};
     use tokio::sync::mpsc;
 
     let mut rl = DefaultEditor::new()?;
     let mut printer = rl.create_external_printer()?;
+
+    // Startup backfill: surface history already in the room (R5/U7).
+    match engine.poll().await {
+        Ok(news) => {
+            for m in &news {
+                let _ = printer.print(format!("{}\n", render(m)));
+            }
+            let _ = printer.print(format!("— caught up ({} message(s)) —\n", news.len()));
+        }
+        Err(e) => {
+            let _ = printer.print(format!("startup poll error: {e}\n"));
+        }
+    }
 
     let (tx, mut rx) = mpsc::unbounded_channel::<Option<String>>();
     // Blocking reader thread: rustyline owns the prompt line; the printer (made
@@ -97,7 +110,15 @@ where
                         Ok(m) => { let _ = printer.print(format!("{}\n", render(&m))); }
                         Err(e) => { let _ = printer.print(format!("send failed: {e}\n")); }
                     },
-                    Some(Line::Vice(text)) => on_vice(text).await,
+                    Some(Line::Vice(text)) => match &model {
+                        // Echo the AI reply locally; the invoker's own messages never
+                        // re-surface via poll (dedup), so this is the only place they see it.
+                        Some(m) => match dispatch(parse_command(&text), m, &engine).await {
+                            Ok(msg) => { let _ = printer.print(format!("{}\n", render(&msg))); }
+                            Err(e) => { let _ = printer.print(format!("@vice error: {e}\n")); }
+                        },
+                        None => { let _ = printer.print("@vice disabled — add .vice.toml to enable\n".to_string()); }
+                    },
                     None => {}
                 },
                 Some(None) | None => break, // reader closed -> quit

@@ -60,6 +60,12 @@ impl Config {
         Config::load_from(Path::new(".vice.toml"), global_config_path().as_deref())
     }
 
+    /// Load using `<dir>/.vice.toml` as the per-repo config, then the global
+    /// fallback. Used when the room repo is not the process's cwd (e.g. `join`).
+    pub fn load_in_dir(dir: &Path) -> Result<Config, ConfigError> {
+        Config::load_from(&dir.join(".vice.toml"), global_config_path().as_deref())
+    }
+
     /// Load with explicit paths — pure and testable. `global` is optional so the
     /// "no global available" case is representable.
     pub fn load_from(per_repo: &Path, global: Option<&Path>) -> Result<Config, ConfigError> {
@@ -102,10 +108,16 @@ pub struct Identity {
     pub author_hash: String,
 }
 
-/// Read `user.name` / `user.email` from git and derive a stable author hash.
+/// Read `user.name` / `user.email` from git (in the cwd) and derive a stable
+/// author hash.
 pub fn git_identity() -> Result<Identity, ConfigError> {
-    let name = git_config("user.name")?;
-    let email = git_config("user.email")?;
+    git_identity_in(Path::new("."))
+}
+
+/// Like `git_identity`, but reads git config from `dir` (the room repo).
+pub fn git_identity_in(dir: &Path) -> Result<Identity, ConfigError> {
+    let name = git_config(dir, "user.name")?;
+    let email = git_config(dir, "user.email")?;
     let author_hash = author_hash(&email);
     Ok(Identity {
         name,
@@ -114,9 +126,10 @@ pub fn git_identity() -> Result<Identity, ConfigError> {
     })
 }
 
-fn git_config(key: &str) -> Result<String, ConfigError> {
+fn git_config(dir: &Path, key: &str) -> Result<String, ConfigError> {
     let out = std::process::Command::new("git")
         .args(["config", "--get", key])
+        .current_dir(dir)
         .output()
         .map_err(|e| ConfigError::Identity(format!("git not runnable: {e}")))?;
     if !out.status.success() {

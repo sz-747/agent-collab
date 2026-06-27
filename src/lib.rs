@@ -5,6 +5,7 @@ pub mod app;
 pub mod config;
 pub mod git;
 pub mod message;
+pub mod session;
 pub mod store;
 pub mod sync;
 pub mod vice;

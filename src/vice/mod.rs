@@ -7,7 +7,7 @@ pub mod client;
 pub mod tools;
 
 use crate::config::ConfigError;
-use crate::message::Kind;
+use crate::message::{Kind, Message};
 use crate::store::Store;
 use crate::sync::{SyncEngine, SyncError};
 use serde_json::Value;
@@ -187,28 +187,29 @@ const NOTES_SYSTEM: &str = "You are @vice, the scribe for two developers. Produc
 // --- Dispatch ---------------------------------------------------------------
 
 /// Run a parsed command: generate via the model loop, then post the reply or
-/// write+sync the doc.
+/// write+sync the doc. Returns the AI message that was posted, so the invoker
+/// can print it locally (their own messages never re-surface via poll).
 pub async fn dispatch<M: ModelClient>(
     cmd: ViceCommand,
     model: &M,
     engine: &SyncEngine,
-) -> Result<(), ViceError> {
+) -> Result<Message, ViceError> {
     match cmd {
         ViceCommand::Reply(q) => {
             let text = run_tool_loop(model, engine.store(), REPLY_SYSTEM, &q, 8).await?;
-            engine
+            let m = engine
                 .send(&text, Kind::Ai, Some(model.model_id().to_string()))
                 .await?;
+            Ok(m)
         }
         ViceCommand::WriteNotes(instruction) => {
-            write_doc(model, engine, DEFAULT_NOTES_PATH, &instruction).await?;
+            write_doc(model, engine, DEFAULT_NOTES_PATH, &instruction).await
         }
         ViceCommand::Write { path, instruction } => {
             let safe = safe_doc_path(&path)?;
-            write_doc(model, engine, &safe, &instruction).await?;
+            write_doc(model, engine, &safe, &instruction).await
         }
     }
-    Ok(())
 }
 
 async fn write_doc<M: ModelClient>(
@@ -216,18 +217,18 @@ async fn write_doc<M: ModelClient>(
     engine: &SyncEngine,
     path: &str,
     instruction: &str,
-) -> Result<(), ViceError> {
+) -> Result<Message, ViceError> {
     let content = run_tool_loop(model, engine.store(), NOTES_SYSTEM, instruction, 8).await?;
     engine.write_doc(path, &content).await?; // overwrite + index + commit/push (LWW)
-    // Let the other peer see that a doc landed.
-    engine
+    // Post a short note so the other peer sees that a doc landed.
+    let m = engine
         .send(
             &format!("wrote {path}"),
             Kind::Ai,
             Some(model.model_id().to_string()),
         )
         .await?;
-    Ok(())
+    Ok(m)
 }
 
 /// Keep doc writes inside the repo under `docs/`; reject traversal/absolute paths.

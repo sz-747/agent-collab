@@ -98,7 +98,7 @@ impl ModelClient for GenaiClient {
             .map_err(|e| ViceError::Model(e.to_string()))?;
 
         if resp.tool_calls().is_empty() {
-            Ok(Turn::Final(resp.content_text_into_string().unwrap_or_default()))
+            Ok(Turn::Final(resp.into_first_text().unwrap_or_default()))
         } else {
             let mapped = resp
                 .into_tool_calls()

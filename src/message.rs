@@ -22,7 +22,7 @@ impl Kind {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Kind> {
+    pub fn from_db(s: &str) -> Option<Kind> {
         match s {
             "human" => Some(Kind::Human),
             "ai" => Some(Kind::Ai),
