@@ -11,8 +11,9 @@ use crate::vice::tools::tool_specs;
 use crate::vice::{Convo, ModelClient, ToolCall, Turn, ViceError};
 
 use genai::chat::{ChatMessage, ChatRequest, Tool, ToolResponse};
+use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, AuthResolver, Endpoint, ServiceTargetResolver};
-use genai::Client;
+use genai::{Client, ModelIden};
 
 pub struct GenaiClient {
     client: Client,
@@ -45,10 +46,15 @@ impl GenaiClient {
         let mut builder = Client::builder().with_auth_resolver(auth);
 
         // Optional custom base URL for OpenAI-compatible providers (DeepSeek/Qwen/local).
+        // These speak the OpenAI protocol, so force the OpenAI adapter — genai
+        // otherwise picks the adapter from the model name, which it won't know
+        // for a `qwen-*`/`deepseek-*` id pointed at a custom endpoint.
         if let Some(base) = cfg.base_url.clone() {
+            let model = cfg.model.clone();
             let st = ServiceTargetResolver::from_resolver_fn(
                 move |mut target: genai::ServiceTarget| -> genai::resolver::Result<genai::ServiceTarget> {
                     target.endpoint = Endpoint::from_owned(base.clone());
+                    target.model = ModelIden::new(AdapterKind::OpenAI, model.clone());
                     Ok(target)
                 },
             );
