@@ -1,0 +1,24 @@
+[package]
+name = "agent-collab"
+version = "0.1.0"
+edition = "2021"
+description = "Git-transport two-human planning room with @vice AI scribe"
+license-file = "LICENSE"
+
+[[bin]]
+name = "agent-collab"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "process", "sync"] }
+rustyline = { version = "18", features = ["buffer-redux"] }  # buffer-redux gates create_external_printer
+genai = "0.6.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+uuid = { version = "1", features = ["v4"] }
+directories = "6"
+
+[dev-dependencies]
+tempfile = "3"

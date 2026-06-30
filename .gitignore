@@ -1,0 +1,8 @@
+/target
+# Local derived SQLite cache — binary, can't merge (R1)
+*.sqlite
+*.sqlite-*
+chat.db
+chat.db-*
+# Provider/model/key config — never committed (R8)
+.vice.toml
